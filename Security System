@@ -1,0 +1,687 @@
+/**********************************************************************************************
+Project :# SECURITY SYSTEM #
+Version : 1.0 
+Date    : 21/9/2013
+Author  : MOHAMED FAWZY
+Company :  
+Comments:full discription follow this link https://www.youtube.com/watch?v=a84P-Ru8WDw
+
+Chip type               : ATmega32A
+Program type            : Application
+AVR Core Clock frequency: 11.059200 MHz
+Memory model            : Small
+External RAM size       : 0
+Data Stack size         : 512
+*****************************************************************************************/
+#include <mega32a.h>
+#include <delay.h>
+#include <string.h>
+#include <alcd.h> 
+#define kp_port     PORTD
+#define kp_pin      PIND
+#define is          ==
+#define alarm       PORTB.0
+#define on          1
+#define done        1
+#define off         0
+__eeprom unsigned char pass_word[6];
+unsigned char pass[6];
+unsigned char pass_1[6];    
+signed char l;
+unsigned int _on=0;
+unsigned int _off=0;
+unsigned int on_time=5;
+unsigned int off_time=5;  
+unsigned char set=0;
+//unsigned char disable=0;
+unsigned char normal=0;
+unsigned char security=0;
+unsigned char n=0;
+static unsigned char mode=0;
+unsigned char result;
+unsigned int delay_time=30;
+unsigned char del_time=0;
+///////////////////////////////////***interrupt vectore***/////////////////////////////////
+interrupt [TIM1_OVF] void timer1_ovf_isr(void)
+    { 
+     if(security is on)
+      {
+        n++;
+        if(n is delay_time/2){alarm=on;TCCR1B=0x00;}
+                        
+      }
+     else
+       {
+         if(++_on <= (on_time/2))alarm= on;
+         else 
+                {
+                 alarm=off;
+                 if(++_off <= (off_time/2));
+                   else {alarm=on;_on=0;_off=0;}
+                }
+       }           
+                                             
+    }             
+////////////////////////////////***scaning keypad***///////////////////////////////////////        
+void kp_check()
+    {
+      unsigned char col;
+      unsigned char row;
+      unsigned char keypad[4][4]=
+                            {
+                              '7','8','9','/',
+                              '4','5','6','x',
+                              '1','2','3','-',
+                              'o','0','=','+'
+                            };
+                            
+       do
+        {
+         kp_port=0x0F;  //ground all rows
+         col=(kp_pin & 0x0F);
+        }                    
+        while(col != 0x0F);    
+////////////////////////////////////////////////////////////////////////////////////
+        do
+            {
+               do
+                 {
+                  delay_ms(20);
+                  col=(kp_pin & 0x0f);
+                 }
+             while(col == 0x0f);
+              delay_ms(20);
+              col=(kp_pin & 0x0f);  
+            }
+             while(col == 0x0f);
+///////////////////////////////////////////////////////////////////////////////////////////////    
+         while(1)
+            {  
+                  
+             kp_port = 0xEF;            //ground row1               
+             col=(kp_pin & 0x0F);
+             if(col != 0x0f)
+                {
+                 row=0
+                 ;
+                 break;
+                }     
+             kp_port = 0xDF;            //ground row2
+             col=(kp_pin & 0x0F);
+             if(col != 0x0f)
+                {   
+                 row=1;
+                 break;   
+                }           
+             kp_port = 0xBF;            //ground row3
+             col=(kp_pin & 0x0F);
+             if(col != 0x0f)
+                {
+                 row=2;
+                 break;
+                }         
+             kp_port = 0x7F;            //ground row4
+             col=(kp_pin & 0x0F);
+             if(col != 0x0f)
+                {
+                 row=3;
+                 break;
+                }              
+             }
+             if(col == 0x0E)     {result=keypad[row][0];}
+             else if(col == 0x0D){result=keypad[row][1];}
+             else if(col == 0x0B){result=keypad[row][2];}
+             else                {result=keypad[row][3];}      
+             delay_ms(100);
+    }
+/************************************************************************    
+************************flashing any text on LCD*************************
+*************************************************************************/
+void flsh_active(char *txt,char num,char x,char y)
+    {      
+     unsigned char cnt;
+      for(cnt=0;cnt<num;cnt++)
+                {
+                 lcd_gotoxy(y,x);
+                 lcd_puts(txt);
+                 delay_ms(80);
+                 lcd_gotoxy(y,x);
+                 lcd_puts("                    ");
+                 delay_ms(80);
+                }        
+    }      
+/****************************************************************************************     
+***************for setting delay time belongs to security mode***************************
+****************************************************************************************/
+void set_del_time()
+    {       
+     unsigned int m;
+     unsigned int sec;
+     unsigned int mint;
+     lcd_clear();
+     while(1)
+       {  
+        mint=delay_time/60;
+        sec=delay_time%60;
+        lcd_gotoxy(0,0);
+        lcd_puts("Enter delay Time:  ");
+        lcd_gotoxy(6,1);  
+        lcd_puts("<00:00>");
+        lcd_gotoxy(7,1);
+        lcd_putchar((mint/10)+48);
+        lcd_putchar((mint%10)+48);
+        lcd_gotoxy(10,1);
+        lcd_putchar((sec/10)+48);
+        lcd_putchar((sec%10)+48);
+        kp_check(); 
+        if(result is '/')delay_time+=30;
+        if(result is 'x')delay_time-=30;
+        if(result is '='){lcd_clear();return;}
+        if(delay_time > 1800)delay_time =30;
+        if(delay_time < 30)delay_time =1800; 
+        if(result is '+')
+                        {
+                         for(m=delay_time;m<=delay_time;m--)
+                            {
+                             mint=m/60;
+                             sec=m%60;
+                             lcd_gotoxy(6,1);  
+                             lcd_puts("<00:00>");
+                             lcd_gotoxy(7,1);
+                             lcd_putchar((mint/10)+48);
+                             lcd_putchar((mint%10)+48);
+                             lcd_gotoxy(10,1);                                          
+                             lcd_putchar((sec/10)+48);
+                             lcd_putchar((sec%10)+48);
+                             delay_ms(1000);    
+                            } 
+                         del_time=done;                  
+                         return;   
+                        }
+       }
+    }    
+/**********************************************************************************    
+**********************************mode sellect*************************************
+**********************************************************************************/
+void mode_screen()
+    {
+      static unsigned char press_no=0;         
+      const char buffer_1[10]= "<DISABLE>"; 
+      const char buffer_2[9]="<NORMAL>";
+      const char buffer_3[11]="<SECURITY>";
+      normal = off;
+      security = off;
+      while(1)  
+             {               
+              lcd_gotoxy(8,1);
+              lcd_puts("Mode");   
+              lcd_gotoxy(4,0);   
+              if(result is '=')return;
+              if(result is '/')
+                    { 
+                     press_no++;
+                     if(press_no is 3)press_no=0;
+                    }          
+              if(result is 'x')
+                    { 
+                     press_no--;
+                     if(press_no is 255)press_no=2;
+                    }          
+              if(result is '+')
+                    {             
+                      if(press_no is 0)
+                                       {                          
+                                        flsh_active("Activated",5,1,5);
+                                        mode=1;  
+                                        lcd_clear();
+                                        normal = off;
+                                        security=off;
+                                        return;
+                                       }
+                      else if(press_no is 1)
+                                       {                          
+                                        flsh_active("Activated",5,1,5);
+                                        mode=2;
+                                        lcd_clear();
+                                        normal = on;
+                                        security=off;
+                                        return;
+                                       }
+                     else if(press_no is 2)
+                                       {      
+                                        set_del_time();
+                                        if(del_time)
+                                            {               
+                                             flsh_active("Activated",5,1,5);
+                                             mode=3;   
+                                             lcd_clear();
+                                             normal = off;
+                                             security=on;
+                                            }
+                                        return;
+                                       }
+                    }    
+              if(press_no is 0)
+                             {
+                              lcd_gotoxy(0,0);
+                              lcd_puts("                ");
+                              lcd_gotoxy(5,0);
+                              lcd_puts(buffer_1);
+                             }
+              else if(press_no is 1)
+                             {
+                              lcd_gotoxy(0,0);
+                              lcd_puts("                ");
+                              lcd_gotoxy(6,0);
+                              lcd_puts(buffer_2);
+                              
+                             }
+              else if(press_no is 2)
+                             {     
+                               lcd_gotoxy(0,0);
+                               lcd_puts("                ");
+                               lcd_gotoxy(5,0);
+                               lcd_puts(buffer_3);
+                             }    
+              kp_check();
+              }  
+    }
+/*********************************************************************
+*************displaying time in minuts:seconds format*****************
+**********************************************************************/
+void dis_time(unsigned int time,unsigned char x)
+    {   
+        unsigned int sec;
+        unsigned int mint;
+        mint=time/60;
+        sec=time%60;
+        lcd_gotoxy(14,x);
+        lcd_putchar((mint/10)+48);
+        lcd_putchar((mint%10)+48);
+        lcd_gotoxy(17,x);
+        lcd_putchar((sec/10)+48);
+        lcd_putchar((sec%10)+48);   
+    }
+/********************************************************************
+**********************set ON//OFF time*******************************
+********************************************************************/
+void time_screen()
+    {                
+     while(1)
+       {
+        lcd_gotoxy(0,0);
+        lcd_puts("1:ON.        <00:00>");
+        lcd_gotoxy(0,1);
+        lcd_puts("2:OFF.       <00:00>"); 
+        dis_time(on_time,0);
+        dis_time(off_time,1);
+        kp_check();     
+        if(result is '1')
+                    {      
+                     lcd_gotoxy(0,1);
+                     lcd_puts("                    ");
+                     while(1)
+                       {
+                        kp_check();
+                        if(result is '/')
+                                        {
+                                         on_time+=5;
+                                         if(on_time is 55)on_time=0;
+                                        }
+                        if(result is 'x')
+                                        {
+                                         on_time-=5;
+                                         if(on_time >250)on_time=50;
+                                        }
+                        if(result is '+'||result is '=')break;
+                        dis_time(on_time,0);
+                       }
+                    }
+        if(result is '2')
+                    {      
+                     lcd_gotoxy(0,0);
+                     lcd_puts("                    ");
+                     while(1)
+                       {
+                        kp_check();
+                        if(result is '/')
+                                        {
+                                         off_time+=5;
+                                         if(off_time is 55)off_time=0;
+                                        }
+                        if(result is 'x')
+                                        {
+                                         off_time-=5;
+                                         if(off_time >250)off_time=50;
+                                        }
+                        if(result is '+')break;
+                        dis_time(off_time,1);
+                       }
+                    }           
+        if(result is '='){lcd_clear();return;}            
+        
+        }
+    }
+///////////////////////////////////***mode setting minue***////////////////////////////////    
+void mode_set()
+    {
+      while(1)                        
+        { 
+         lcd_gotoxy(0,0);
+         lcd_puts("1:SELLECT MODE.");
+         lcd_gotoxy(0,1);
+         lcd_puts("2:ON/OFF TIME SET.");
+         if(security is on )return;              //for going to main_screen after choosing mode
+         kp_check();
+         if(result is '1'){lcd_clear();mode_screen();}
+         else if (result is '2'){lcd_clear();time_screen();}
+         else if (result is '=')return;
+        }
+    }
+/****************************************************************    
+***********************change password***************************
+****************************************************************/
+void change_pass()
+    {              
+    
+     unsigned char n;    
+     signed char c;    
+     while(1)        
+        {                               
+         unsigned char pass_2[]="     ";
+         unsigned char pass_n[]="     ";
+         unsigned char pass_c[]="     ";
+         lcd_gotoxy(0,0);
+         lcd_puts("Enter Old Password:");
+         for(n=0;n<5;n++)
+                {               
+                 kp_check();
+                 if(result is '='){lcd_clear();return;}
+                 else
+                     {                   
+                      pass_2[n]=result;
+                      lcd_gotoxy(n+7,1);
+                      lcd_putchar(result);
+                      delay_ms(200);    
+                      lcd_gotoxy(n+7,1);
+                      lcd_putchar('*');
+                     }   
+                }
+          n=0;     
+          l=strcmp(pass_2,pass);
+          if(!l)
+               {
+                flsh_active("<Right password>",5,1,2);
+                lcd_gotoxy(0,0);
+                lcd_puts("Enter New Password:");
+                while(1)               
+                        {              
+                         lcd_gotoxy(7,1);
+                         for(n=0;n<5;n++)
+                            {
+                             kp_check();
+                             pass_n[n]=result;
+                             lcd_putchar(result);
+                             pass_2[n]=result;
+                            } 
+                         delay_ms(300);   
+                         n=0;   
+                         lcd_clear();   
+                         lcd_gotoxy(0,0);
+                         lcd_puts("Confirm Password:");
+                         lcd_gotoxy(7,1);
+                         for(n=0;n<5;n++)
+                            {
+                             kp_check();
+                             if(result is '='){lcd_clear();return;}
+                             pass_c[n]=result;
+                             lcd_putchar(result);
+                             pass_2[n]=result;
+                            }
+                         delay_ms(300);      
+                         n=0;    
+                         c=strcmp(pass_c,pass_n); 
+                         if(!c)
+                              {
+                               lcd_clear();
+                               lcd_gotoxy(0,0);
+                               flsh_active("Password Changed.",5,1,2);
+                               for(n=0;n<5;n++){pass[n]=pass_c[n];pass_word[n]=pass_c[n];} 
+                               return;
+                              }       
+                         else 
+                              {
+                               lcd_clear();
+                               lcd_gotoxy(0,0);
+                               flsh_active("Not Matched!!!!.",5,1,2); 
+                               break;
+                              }     
+                        }
+               }
+          else {flsh_active("<Wrong password>",5,1,2);}            
+        }                          
+    }
+/***************************************************************
+*************************setting minue**************************
+****************************************************************/          
+void set_screen()
+    {          
+      while(1)
+       {      
+        lcd_clear();
+        lcd_gotoxy(0,0);    
+        lcd_puts("1:MDOE SETTINGS."); 
+        lcd_gotoxy(0,1);
+        lcd_puts("2:CHANGE PASSWORD.");
+        if(mode && result is '=')return; 
+        if(security is on )return;         //for going to main_screen after choosing mode
+        kp_check();     
+        if(result is '='){lcd_clear();return;}
+        if(result is '1')
+                        {
+                         lcd_clear();                                    
+                         mode_set();
+                        }
+        if(result is '2')
+                        {
+                         lcd_clear();
+                         change_pass();                                    
+                        }                                    
+       }
+    }   
+void pass_screen()
+    {                 
+      char pass_2 []="     ";
+      unsigned char i;
+      while(1)
+      {
+       lcd_gotoxy(0,0);
+       lcd_puts("Plz Enter Password:");
+       if(result is '='&& !mode){lcd_clear();return;}
+       for(i=0;i<5;i++)
+            {                 
+              kp_check();  
+              if(result is '=' && !normal && !security){lcd_clear();return;}
+              else 
+                  {
+                   pass_2[i]=result;
+                   lcd_gotoxy(i+7,1);
+                   lcd_putchar(result);
+                   delay_ms(200);    
+                   lcd_gotoxy(i+7,1);
+                   lcd_putchar('*');         
+                  }
+            }                  
+       l=strcmp(pass_2,pass);
+       if(!l)
+            {            
+             flsh_active("<Right password>",5,1,2);
+             if(TCCR1B && normal is on){TCCR1B=0x00;alarm = off;}
+             if(TCCR1B && security is on){TCCR1B=0x00;alarm = off;}
+             if(set){lcd_clear();set=off;set_screen();}
+             return;
+            }      
+       else
+            {
+             if(result is '=' && !security && !normal)break;
+             flsh_active("<Wrong password>",5,1,2);
+            }         
+      }                   
+    }
+/*******************************************************************    
+*************************welcome screen*****************************
+*******************************************************************/                                      
+void intro()
+    {
+     char i=0; 
+     lcd_gotoxy(6,0);
+     lcd_puts("Welcome");
+     lcd_gotoxy(3,1);
+     lcd_puts("Security System");
+     delay_ms(700);
+     lcd_clear();  
+     lcd_gotoxy(4,0);
+     lcd_puts("Please Wait");
+     lcd_gotoxy(0,1);
+     lcd_puts("LOADING");
+    for(i=0;i<10;i++)
+      {       
+       if(i<3)
+            { 
+             lcd_putchar('.');
+             delay_ms(500);
+            }
+       if(i>3)
+            { 
+             lcd_putchar('.');
+             delay_ms(250);
+            } 
+      }
+    lcd_clear();
+    } 
+/*****************************************************************       
+*****************external interrupt vectore***********************
+*****************************************************************/         
+interrupt [EXT_INT2] void ext_int2_isr(void)
+        {            
+         if(normal is on)
+                        {
+                          TCCR1A=0x00;
+                          TCCR1B=0x04;
+                          TCNT1H=0x85;
+                          TCNT1L=0xEE;
+                          TIMSK|=(1<<TOIE1);
+                          #asm ("sei")
+                          alarm=on;
+                          lcd_clear();
+                          pass_screen();
+                          normal=off;
+                          security = off;
+                          lcd_clear();
+                          lcd_gotoxy(0,0);
+                          lcd_puts("Alarm <off>.");
+                          lcd_gotoxy(0,1);
+                          lcd_puts("<Any Key> FOR EXIT");
+                          kp_check(); 
+                        }               
+         else if (security is on)
+                        {
+                          TCCR1A=0x00;
+                          TCCR1B=0x04;
+                          TCNT1H=0x85;
+                          TCNT1L=0xEE;
+                          TIMSK|=(1<<TOIE1);
+                          #asm ("sei")
+                          lcd_clear(); 
+                         // alarm=on;
+                          pass_screen();
+                          alarm=off;
+                          normal = off;
+                          security = off;
+                          mode=1;
+                          lcd_clear();
+                          lcd_gotoxy(0,0);
+                          lcd_puts("Alarm <off>.");
+                          lcd_gotoxy(0,1);
+                          lcd_puts("<Any Key> FOR EXIT"); 
+                          kp_check();
+                        }                             
+        }    
+/***********************************************************************
+******************initialization microcontroller************************        
+***********************************************************************/
+void micro_init()
+        {
+         PORTA=0x00;
+         DDRA=0x00;
+         ////////////
+         PORTB=0x00;
+         DDRB=0x01;
+         ////////////
+         GICR|=0x20;
+         MCUCR=0x00;
+         MCUCSR=0x40;
+         GIFR=0x20;
+         ////////////
+         PORTC=0x00;
+         DDRC=0xFF; 
+         ////////////
+         PORTD=0xFF;
+         DDRD=0xF0;
+         ////////////  
+         ACSR=0X80;
+         ////////////
+  } 
+void set_pass()
+        {      
+         
+         unsigned char count=0;
+         lcd_clear();
+         lcd_gotoxy(0,0);
+         lcd_puts("Enter Password:"); 
+               
+         for(count=0;count<5;count++)
+                {
+                 kp_check();
+                 pass_1[count]=result;
+                 lcd_gotoxy(count+7,1);
+                 lcd_putchar(result);  
+                }           
+         count=0;                      
+         flsh_active("Saved.",5,1,7);
+         for(count=0;count<5;count++){pass_word[count]=pass_1[count];}
+        }              
+void main()
+    { 
+      unsigned char num;   
+      #asm ("sei") 
+      micro_init();      
+      lcd_init(20);
+      intro(); 
+      if(pass_word[0] is 255) {set_pass();}
+      for(num =0;num<5;num++)
+                       {
+                        pass[num]=pass_word[num];
+                       }       
+      while (1)
+        {          
+         lcd_gotoxy(0,0);
+         lcd_puts("SYSTEM MODE:");
+         lcd_puts("<D>"); 
+         lcd_gotoxy(13,0);                   
+         
+         if(/*mode is 1 ||*/ mode is 1){lcd_putchar('D');}
+         else if(mode is 2){lcd_putchar('N');normal=on;}
+         else if(mode is 3){lcd_putchar('S');security=on;}
+         
+         lcd_gotoxy(0,1);
+         lcd_puts("<SET>:For Settings. ");
+         kp_check();           
+         if(result is '-')
+                   {            
+                    lcd_clear();
+                    set=on;                   //to know that pass request for entering set_screen 
+                    pass_screen();
+                   }                    
+        }                                      
+    }
