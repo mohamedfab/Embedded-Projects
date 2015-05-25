@@ -1,0 +1,172 @@
+/*
+Project :# Tempreture Controller #
+Version : 1.0 
+Date    : 15/2/2014
+Author  : Mohamed Fawzy
+Tester  :Mohamed Fawzy
+Company : MDS 
+Comments: 
+
+Chip type               : PIC16f628a
+Program type            : Application
+AVR Core Clock frequency: 8.000000 MHz
+Memory model            : Small
+*/
+
+
+#define set_sw        portc.f5
+#define set_sw_dir    trisc.f5
+
+#define inc_sw        portc.f6
+#define inc_sw_dir    trisc.f6
+
+#define dec_sw        portc.f7
+#define dec_sw_dir    trisc.f7
+
+#define seg           portd
+#define seg_dir       trisd
+#define led           portb.f0
+#define led_dir       trisb.f0
+
+#define buzzer        portb.f1
+#define buzzer_dir    trisb.f1
+
+#define seg1_en       portc.f1
+#define seg2_en       portc.f0
+#define seg3_en       portc.f2
+#define seg4_en       portc.f3
+
+#define seg1_en_dir   trisc.f1
+#define seg2_en_dir   trisc.f0
+#define seg3_en_dir   trisc.f2
+#define seg4_en_dir   trisc.f3
+#define output           0
+#define input            1
+#define on               1
+#define off              0
+#define is               ==
+#define pressed          0
+char num[10]={192,249,164,176,153,146,131,248,128,152};
+int temp=0;
+void show_temp(int temp)
+    {
+     seg1_en=on;
+     seg2_en=off;
+     seg=(num[temp/10]);
+     delay_us(500);
+     seg=0xff;
+     seg1_en=off;
+
+     seg2_en=on;
+     seg=(num[temp%10]);
+     delay_us(500);
+     seg=0xff;
+     seg2_en=off;
+     
+     seg3_en=on;
+     seg=156;
+     delay_us(500);
+     seg=0xff;
+     seg3_en=off;
+     
+     seg4_en=on;
+     seg=198;
+     delay_us(500);
+     seg=0xff;
+     seg4_en=off;
+    }
+void delay_with_show_temp(int delay,int show)
+   {
+     int i=0;
+     for(i=0;i<delay;i++)
+     {
+      delay_ms(1);
+      show_temp(show);
+     }
+
+   }
+void set_option()
+   {
+     led=off;
+     buzzer=off;
+     while(1)
+           {
+            show_temp(temp);
+            if(inc_sw is pressed)
+                      {
+                       temp++;
+                       delay_with_show_temp(150,temp);
+                       if(temp is 100)temp=0;
+                      }
+            if(dec_sw is pressed)
+                      {
+                       temp--;
+                       delay_with_show_temp(150,temp);
+                       if(temp is -1)temp=99;
+                      }
+            if(set_sw is pressed)
+                      {
+
+                         led=on;
+                         while(set_sw is pressed)show_temp(temp);
+                         delay_with_show_temp(1,temp);
+                         eeprom_write(1,temp);
+                         return;
+                      }
+           }
+   }
+void init_micro()
+   {
+    CMCON=0x07;                //for disabling comparator
+    ADCON1=0X00;               //for using porta as digital I/O except RA2
+    TRISA=0Xff;
+    led_dir=output;
+    buzzer_dir=output;
+    buzzer=off;
+    led=off;
+    seg_dir=0X00;
+    seg=0xff;              //comfigure all port'D' as output
+    seg1_en_dir = output;      //configure pin0 in port'B' as output
+    seg2_en_dir = output;      //configure pin1 in port'B' as output
+    seg2_en_dir = output;      //configure pin1 in port'B' as output
+    seg3_en_dir = output;      //configure pin1 in port'B' as output
+    seg4_en_dir = output;      //configure pin1 in port'B' as output
+
+    set_sw_dir = input;        //configure pin5 in port'B' as input
+    
+    inc_sw_dir = input;        //configure pin6 in port'B' as input
+    dec_sw_dir = input;        //configure pin7 in port'B' as input
+    adc_init();
+    if(eeprom_read(1)!= 255)
+    temp=eeprom_read(1);
+    else temp=0;
+   }
+void main()
+ {
+   long temp_measured;
+   init_micro();
+   while(1)
+   {
+    if(set_sw is pressed)
+             {
+               while(set_sw is pressed)show_temp(temp_measured);
+               delay_with_show_temp(1,temp_measured);
+               set_option();
+             }
+    if(temp_measured>=(temp+2))
+            {
+              led=off;
+              buzzer=on;
+            }
+    else 
+            {
+              led=on;
+              buzzer=off;
+            }
+      temp_measured=adc_read(2);
+      temp_measured=(temp_measured*5000)>>10;
+      temp_measured=(temp_measured/10);
+      show_temp(temp_measured);
+      delay_with_show_temp(50,temp_measured);
+   }
+ }
